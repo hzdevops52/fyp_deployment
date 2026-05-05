@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: false
+      dnsConfig:
+        nameservers:
+        - 10.96.0.10
+        searches:
+        - default.svc.cluster.local
+        - svc.cluster.local
+        - cluster.local
+      containers:
+      - name: backend
+        image: hzdevops52/backend:v2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: MONGODB_URI
+          value: "mongodb://mongo.default.svc.cluster.local:27017/pdfNotesHub"
+        - name: PORT
+          value: "5000"
+        - name: NODE_ENV
+          value: "production"

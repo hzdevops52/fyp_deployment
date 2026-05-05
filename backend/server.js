@@ -1,4 +1,7 @@
 require("dotenv").config();
+
+console.log("ENV MONGODB_URI =", process.env.MONGODB_URI);
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -8,58 +11,68 @@ const mongoose = require("mongoose");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// MongoDB Connection
+/* =======================
+   MongoDB Connection
+======================= */
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Error:", err));
+  .catch((err) => {
+    console.error("❌ MongoDB Error:", err.message);
+    // No process.exit — let pod stay alive
+  });
 
-// Middleware
-app.use(cors({
-  origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
-  credentials: true
-}));
+/* =======================
+   Middleware
+======================= */
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files statically
+/* =======================
+   Uploads Directory
+======================= */
 const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 app.use("/uploads", express.static(uploadsDir));
 
-// Routes
+/* =======================
+   Routes — /api prefix to match frontend
+======================= */
 app.use("/api/pdfs", require("./routes/pdf"));
 app.use("/api/ai", require("./routes/ai"));
 
-// Health check
+/* =======================
+   Health Check
+======================= */
 app.get("/", (req, res) => {
   res.json({
     status: "✅ Backend running",
-    database: "MongoDB",
-    ollama: "Ready",
-    model: "llama3.2:1b",
+    database: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected",
   });
 });
 
-// 404 handler
+/* =======================
+   404 Handler
+======================= */
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// Error handling
+/* =======================
+   Error Handler
+======================= */
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: err.message });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+/* =======================
+   Start Server
+======================= */
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
   console.log(`📁 Uploads directory: ${uploadsDir}`);
-  console.log(`🤖 Ollama model: llama3.2:1b`);
 });

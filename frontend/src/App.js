@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Download, Sparkles, BookOpen, Brain, Search, Eye, X, Check, XCircle, Zap } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = `${process.env.REACT_APP_API_URL}/api`;
 
 function App() {
   const [currentPage, setCurrentPage] = useState('home');
@@ -34,7 +34,7 @@ function App() {
 
     setIsUploading(true);
     const formData = new FormData();
-    formData.append('pdf', file);
+    formData.append('file', file);
     formData.append('title', file.name.replace('.pdf', ''));
 
     try {

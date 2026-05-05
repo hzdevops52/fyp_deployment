@@ -54,7 +54,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // Upload PDF
-router.post("/upload", upload.single("pdf"), async (req, res) => {
+router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No PDF file uploaded" });
