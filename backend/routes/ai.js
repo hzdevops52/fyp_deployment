@@ -8,7 +8,7 @@ const {
   extractKeyPoints,
   generateQuiz,
   chatWithPDF,
-} = require("../utils/ollama");
+} = require("../utils/gemini");
 
 // Get existing analysis
 router.get("/analysis/:id", async (req, res) => {

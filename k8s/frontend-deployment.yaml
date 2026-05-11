@@ -12,6 +12,8 @@ spec:
       labels:
         app: frontend
     spec:
+      imagePullSecrets:
+      - name: dockerhub-secret
       containers:
       - name: frontend
         image: hzdevops52/frontend:v4

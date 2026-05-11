@@ -12,6 +12,8 @@ spec:
       labels:
         app: backend
     spec:
+      imagePullSecrets:
+      - name: dockerhub-secret
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: false
       dnsConfig:
@@ -23,7 +25,7 @@ spec:
         - cluster.local
       containers:
       - name: backend
-        image: hzdevops52/backend:v2
+        image: hzdevops52/backend:v7
         imagePullPolicy: Always
         ports:
         - containerPort: 5000
@@ -34,3 +36,15 @@ spec:
           value: "5000"
         - name: NODE_ENV
           value: "production"
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: groq-secret
+              key: api-key
+        volumeMounts:
+        - name: uploads-storage
+          mountPath: /app/uploads
+      volumes:
+      - name: uploads-storage
+        persistentVolumeClaim:
+          claimName: uploads-pvc
