@@ -26,7 +26,7 @@ spec:
       containers:
       - name: backend
         image: hzdevops52/backend:v7
-        imagePullPolicy: Always
+        imagePullPolicy: Never
         ports:
         - containerPort: 5000
         env:
