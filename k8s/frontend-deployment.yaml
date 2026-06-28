@@ -16,7 +16,7 @@ spec:
       - name: dockerhub-secret
       containers:
       - name: frontend
-        image: hzdevops52/frontend:offline
+        image: hzdevops52/frontend:wifi
         imagePullPolicy: Never
         ports:
         - containerPort: 80

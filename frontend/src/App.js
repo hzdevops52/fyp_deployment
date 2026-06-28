@@ -10,6 +10,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [viewerPdf, setViewerPdf] = useState(null);
+  const [formatPdf, setFormatPdf] = useState(null);
+  const [isFormatting, setIsFormatting] = useState(false);
+  const [formatResult, setFormatResult] = useState(null);
 
   useEffect(() => {
     fetchPDFs();
@@ -27,8 +30,11 @@ function App() {
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Please select a PDF file');
+    const ALLOWED_TYPES = ['application/pdf','application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword'];
+    const ALLOWED_EXTS = ['.pdf','.pptx','.ppt','.docx','.doc'];
+    const fileExt = file ? '.' + file.name.split('.').pop().toLowerCase() : '';
+    if (!file || (!ALLOWED_TYPES.includes(file.type) && !ALLOWED_EXTS.includes(fileExt))) {
+      alert('Please select a PDF, PPT/PPTX, or DOC/DOCX file');
       return;
     }
 
@@ -70,6 +76,38 @@ function App() {
     setViewerPdf(null);
   };
 
+  const openFormatModal = (pdf) => {
+    setFormatPdf(pdf);
+    setFormatResult(null);
+  };
+
+  const closeFormatModal = () => {
+    setFormatPdf(null);
+    setFormatResult(null);
+  };
+
+  const handleFormat = async (template) => {
+    setIsFormatting(true);
+    try {
+      const response = await fetch(`${API_URL}/format/${formatPdf._id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setFormatResult(data.pdf);
+        fetchPDFs();
+      } else {
+        alert('Formatting failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Formatting failed: ' + err.message);
+    } finally {
+      setIsFormatting(false);
+    }
+  };
+
   const filteredPdfs = pdfs.filter(pdf =>
     pdf.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -109,6 +147,7 @@ function App() {
         
         {/* PDF VIEWER MODAL */}
         {viewerPdf && <PDFViewerModal pdf={viewerPdf} onClose={closePdfViewer} />}
+        {formatPdf && <FormatModal pdf={formatPdf} onClose={closeFormatModal} onFormat={handleFormat} isFormatting={isFormatting} result={formatResult} apiUrl={API_URL} />}
         
         {/* HOME PAGE */}
         {currentPage === 'home' && (
@@ -183,6 +222,7 @@ function App() {
                   index={index}
                   onViewWithAI={() => viewPdfWithAI(pdf)}
                   onViewPdf={() => openPdfViewer(pdf)}
+                  onFormat={() => openFormatModal(pdf)}
                 />
               ))}
             </div>
@@ -217,11 +257,11 @@ function App() {
                 or click to browse from your computer
               </p>
               <p style={styles.uploadCardSubtext}>
-                Supports PDF files up to 20MB
+                Supports PDF, PPTX, DOC files up to 20MB
               </p>
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.pptx,.ppt,.docx,.doc"
                 onChange={handleFileUpload}
                 disabled={isUploading}
                 style={{ display: 'none' }}
@@ -232,7 +272,7 @@ function App() {
                 opacity: isUploading ? 0.6 : 1,
                 cursor: isUploading ? 'not-allowed' : 'pointer'
               }}>
-                {isUploading ? 'Uploading...' : 'Select PDF File'}
+                {isUploading ? 'Uploading...' : 'Select File (PDF, PPT, Word)'}
               </label>
             </div>
           </div>
@@ -306,7 +346,7 @@ function FeatureCard({ icon, title, description, color }) {
   );
 }
 
-function PDFCard({ pdf, index, onViewWithAI, onViewPdf }) {
+function PDFCard({ pdf, index, onViewWithAI, onViewPdf, onFormat }) {
   const [isHovered, setIsHovered] = useState(false);
   
   const handleDownload = async () => {
@@ -339,6 +379,11 @@ function PDFCard({ pdf, index, onViewWithAI, onViewPdf }) {
       <div style={styles.pdfCardHeader}>
         <FileText size={40} color="#667eea" />
         <div style={styles.pdfBadge}>{pdf.pages || 1}p</div>
+        {pdf.originalFormat && pdf.originalFormat !== 'pdf' && (
+          <div style={{...styles.pdfBadge, background: '#fff3e0', color: '#e65100', marginLeft: '4px'}}>
+            {pdf.originalFormat.toUpperCase()}
+          </div>
+        )}
       </div>
       
       <h3 style={styles.pdfTitle}>{pdf.title}</h3>
@@ -346,12 +391,15 @@ function PDFCard({ pdf, index, onViewWithAI, onViewPdf }) {
         {pdf.subject} • {(pdf.fileSize / 1024).toFixed(0)}KB
       </p>
       
-      <div style={styles.pdfActions}>
+      <div style={{...styles.pdfActions, gridTemplateColumns: '1fr 1fr 1fr 1fr'}}>
         <button onClick={onViewPdf} style={{...styles.actionBtn, background: '#2196F3'}}>
           <Eye size={16} /> View
         </button>
         <button onClick={onViewWithAI} style={{...styles.actionBtn, background: '#667eea'}}>
           <Sparkles size={16} /> AI
+        </button>
+        <button onClick={onFormat} style={{...styles.actionBtn, background: '#FF9800'}}>
+          <FileText size={16} /> Format
         </button>
         <button onClick={handleDownload} style={{...styles.actionBtn, background: '#4CAF50'}}>
           <Download size={16} />
@@ -380,6 +428,80 @@ function PDFViewerModal({ pdf, onClose }) {
     </div>
   );
 }
+
+function FormatModal({ pdf, onClose, onFormat, isFormatting, result, apiUrl }) {
+  const templates = [
+    { id: 'report', label: '📄 Report', desc: 'Formal academic/professional report' },
+    { id: 'resume', label: '👤 Resume/CV', desc: 'Structured resume format' },
+    { id: 'notes', label: '📝 Study Notes', desc: 'Organized bullet-point notes' },
+  ];
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={{...styles.modalContainer, maxWidth: '500px', height: 'auto', padding: '30px'}} onClick={e => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <h2 style={{margin:0, fontSize:'20px', color:'#333'}}>📐 Format Document</h2>
+          <button onClick={onClose} style={styles.modalClose}>✕ Close</button>
+        </div>
+        <p style={{color:'#666', margin:'15px 0', fontSize:'14px'}}>
+          Reformat <strong>{pdf.title}</strong> using AI into a new template
+        </p>
+
+        {!result ? (
+          <div>
+            {templates.map(t => (
+              <button
+                key={t.id}
+                onClick={() => !isFormatting && onFormat(t.id)}
+                disabled={isFormatting}
+                style={{
+                  width:'100%', padding:'14px 16px', marginBottom:'10px',
+                  borderRadius:'10px', border:'2px solid #e0e0e0',
+                  background: isFormatting ? '#f5f5f5' : 'white',
+                  cursor: isFormatting ? 'not-allowed' : 'pointer',
+                  textAlign:'left', transition:'all 0.2s',
+                  opacity: isFormatting ? 0.6 : 1,
+                }}
+              >
+                <div style={{fontWeight:'bold', fontSize:'15px', color:'#333'}}>{t.label}</div>
+                <div style={{fontSize:'12px', color:'#888', marginTop:'3px'}}>{t.desc}</div>
+              </button>
+            ))}
+            {isFormatting && (
+              <div style={{textAlign:'center', padding:'20px', color:'#667eea'}}>
+                <div style={{fontSize:'14px'}}>⏳ Formatting with AI... please wait</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{textAlign:'center', padding:'20px'}}>
+            <div style={{fontSize:'40px', marginBottom:'10px'}}>✅</div>
+            <h3 style={{color:'#333', marginBottom:'8px'}}>Document Formatted!</h3>
+            <p style={{color:'#666', fontSize:'14px', marginBottom:'20px'}}>
+              Your document has been reformatted as a <strong>{result.templateUsed}</strong>
+            </p>
+            <a
+              href={`${apiUrl}/pdfs/download/${result._id}`}
+              style={{
+                display:'inline-block', background:'linear-gradient(135deg, #667eea, #764ba2)',
+                color:'white', padding:'12px 24px', borderRadius:'8px',
+                textDecoration:'none', fontWeight:'bold', fontSize:'14px',
+              }}
+            >
+              ⬇️ Download Formatted PDF
+            </a>
+            <div style={{marginTop:'15px'}}>
+              <button onClick={onClose} style={{background:'none', border:'none', color:'#667eea', cursor:'pointer', fontSize:'14px'}}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 function AIAssistantPage({ pdf, onBack }) {
   const [activeTab, setActiveTab] = useState('summary');

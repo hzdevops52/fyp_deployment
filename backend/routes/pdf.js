@@ -20,17 +20,65 @@ const storage = multer.diskStorage({
   },
 });
 
+const ALLOWED_MIMETYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+];
+
+const ALLOWED_EXTENSIONS = [".pdf", ".pptx", ".ppt", ".docx", ".doc"];
+
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === "application/pdf") {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_MIMETYPES.includes(file.mimetype) || ALLOWED_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Only PDF files allowed"));
+      cb(new Error("Only PDF, PPT/PPTX, and DOC/DOCX files allowed"));
     }
   },
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 });
+
+const { execSync } = require("child_process");
+const mammoth = require("mammoth");
+const officeParser = require("officeparser");
+
+const convertToPDF = (filePath, outputDir) => {
+  execSync(`libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${filePath}" `, {
+    timeout: 60000,
+  });
+  const base = path.basename(filePath, path.extname(filePath));
+  return path.join(outputDir, base + ".pdf");
+};
+
+const extractOfficeText = async (filePath, format) => {
+  try {
+    if (format === "docx") {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value || "";
+    }
+    if (format === "pptx") {
+      const result = await officeParser.parseOffice(filePath);
+      return result.toText ? result.toText() : "";
+    }
+    return "";
+  } catch (err) {
+    console.error("Office text extraction error:", err.message);
+    return "";
+  }
+};
+
+const getFormatFromMimetype = (mimetype, originalName) => {
+  const ext = path.extname(originalName || "").toLowerCase();
+  if (mimetype === "application/pdf" || ext === ".pdf") return "pdf";
+  if (mimetype.includes("presentation") || ext === ".pptx" || ext === ".ppt") return "pptx";
+  if (mimetype.includes("wordprocessingml") || mimetype === "application/msword" || ext === ".docx" || ext === ".doc") return "docx";
+  return "pdf";
+};
 
 // Get all PDFs
 router.get("/", async (req, res) => {
@@ -57,15 +105,45 @@ router.get("/:id", async (req, res) => {
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No PDF file uploaded" });
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     const { title, subject } = req.body;
+    const originalFormat = getFormatFromMimetype(req.file.mimetype, req.file.originalname);
+
+    let finalFilePath = req.file.path;
+    let finalFileName = req.file.filename;
+    let finalSize = req.file.size;
+
+    let cleanExtractedText = null;
+
+    // Convert PPT/Word to PDF using LibreOffice
+    if (originalFormat !== "pdf") {
+      try {
+        // Extract clean text from the ORIGINAL office file first (before conversion/deletion)
+        cleanExtractedText = await extractOfficeText(req.file.path, originalFormat);
+
+        const uploadDir = path.dirname(req.file.path);
+        const convertedPath = convertToPDF(req.file.path, uploadDir);
+
+        if (fs.existsSync(convertedPath)) {
+          fs.unlinkSync(req.file.path); // remove original office file
+          finalFilePath = convertedPath;
+          finalFileName = path.basename(convertedPath);
+          finalSize = fs.statSync(convertedPath).size;
+        } else {
+          throw new Error("Conversion output not found");
+        }
+      } catch (convErr) {
+        console.error("Conversion error:", convErr.message);
+        return res.status(500).json({ error: "Failed to convert file to PDF: " + convErr.message });
+      }
+    }
 
     // Get page count
     let pageCount = 1;
     try {
-      const buffer = fs.readFileSync(req.file.path);
+      const buffer = fs.readFileSync(finalFilePath);
       const parsed = await pdfParse(buffer);
       pageCount = parsed.numpages || 1;
     } catch (err) {
@@ -74,12 +152,14 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const pdf = await PDF.create({
       fileName: req.file.originalname,
-      savedFileName: req.file.filename,
-      title: title || req.file.originalname.replace(".pdf", ""),
-      filePath: req.file.path,
-      fileSize: req.file.size,
+      originalFormat,
+      savedFileName: finalFileName,
+      title: title || req.file.originalname.replace(/\.(pdf|pptx?|docx?)$/i, ""),
+      filePath: finalFilePath,
+      fileSize: finalSize,
       subject: subject || "General",
       pages: pageCount,
+      extractedText: cleanExtractedText,
     });
 
     res.status(201).json({
@@ -87,6 +167,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       pdf: {
         _id: pdf._id,
         fileName: pdf.fileName,
+        originalFormat: pdf.originalFormat,
         savedFileName: pdf.savedFileName,
         title: pdf.title,
         fileSize: pdf.fileSize,

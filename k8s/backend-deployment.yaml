@@ -25,7 +25,7 @@ spec:
         - cluster.local
       containers:
       - name: backend
-        image: hzdevops52/backend:v7
+        image: hzdevops52/backend:v16
         imagePullPolicy: Never
         ports:
         - containerPort: 5000

@@ -43,6 +43,7 @@ app.use("/uploads", express.static(uploadsDir));
 ======================= */
 app.use("/api/pdfs", require("./routes/pdf"));
 app.use("/api/ai", require("./routes/ai"));
+app.use("/api/format", require("./routes/format"));
 
 /* =======================
    Health Check

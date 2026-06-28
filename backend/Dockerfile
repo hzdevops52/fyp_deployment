@@ -1,12 +1,7 @@
-FROM node:18-alpine
-
+FROM backend-stage1
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm install --only=production
-
 COPY . .
-
 EXPOSE 5000
-
 CMD ["node", "server.js"]

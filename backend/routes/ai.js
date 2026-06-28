@@ -10,6 +10,13 @@ const {
   chatWithPDF,
 } = require("../utils/gemini");
 
+const getDocumentText = async (pdf) => {
+  if (pdf.extractedText && pdf.extractedText.trim().length > 100) {
+    return pdf.extractedText;
+  }
+  return extractPDFText(pdf.filePath);
+};
+
 // Get existing analysis
 router.get("/analysis/:id", async (req, res) => {
   try {
@@ -38,7 +45,7 @@ router.post("/analyze/:id", async (req, res) => {
 
     console.log("📄 Analyzing PDF:", pdf.fileName);
 
-    const text = await extractPDFText(pdf.filePath);
+    const text = await getDocumentText(pdf);
     console.log(`✅ Extracted ${text.length} characters`);
 
     const summary = await generateSummary(text);
@@ -78,7 +85,7 @@ router.post("/quiz/:id", async (req, res) => {
 
     console.log("🔄 Generating quiz for:", pdf.fileName);
 
-    const text = await extractPDFText(pdf.filePath);
+    const text = await getDocumentText(pdf);
 
     if (!text || text.length < 300) {
       return res.status(400).json({
@@ -116,7 +123,7 @@ router.post("/chat/:id", async (req, res) => {
 
     console.log("💬 Chat question for:", pdf.fileName);
 
-    const text = await extractPDFText(pdf.filePath);
+    const text = await getDocumentText(pdf);
     const answer = await chatWithPDF(text, question, conversationHistory);
 
     res.json({ answer });

@@ -100,4 +100,8 @@ const chatWithPDF = async (text, userQuestion) => {
   return callGroq(prompt);
 };
 
-module.exports = { extractPDFText, generateSummary, extractKeyPoints, generateQuiz, chatWithPDF };
+const callGroqForTemplate = async (prompt) => {
+  return callGroq(prompt);
+};
+
+module.exports = { extractPDFText, generateSummary, extractKeyPoints, generateQuiz, chatWithPDF, callGroqForTemplate };
